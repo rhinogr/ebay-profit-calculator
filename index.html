@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>eBay Profit Calculator</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+                'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        function EbayProfitCalculator() {
+            const [items, setItems] = useState([]);
+            const [currentItem, setCurrentItem] = useState({
+                name: '',
+                cost: '',
+                ebayPrice: '',
+                shippingCost: '',
+                packageCost: '1.00',
+                salesTax: '8.6',
+                hasStore: true,
+                targetROI: '500'
+            });
+            const [showHistory, setShowHistory] = useState(false);
+
+            useEffect(() => {
+                const saved = localStorage.getItem('ebayCalculatorItems');
+                if (saved) {
+                    setItems(JSON.parse(saved));
+                }
+            }, []);
+
+            useEffect(() => {
+                if (items.length > 0) {
+                    localStorage.setItem('ebayCalculatorItems', JSON.stringify(items));
+                }
+            }, [items]);
+
+            const calculateProfit = (item) => {
+                const cost = parseFloat(item.cost) || 0;
+                const price = parseFloat(item.ebayPrice) || 0;
+                const shipCost = parseFloat(item.shippingCost) || 0;
+                const pkgCost = parseFloat(item.packageCost) || 0;
+                const taxRate = (parseFloat(item.salesTax) || 0) / 100;
+                const fvfRate = item.hasStore ? 0.0915 : 0.1325;
+                const targetROI = parseFloat(item.targetROI) || 500;
+
+                const salesTax = cost * taxRate;
+                const totalCost = cost + salesTax + shipCost + pkgCost;
+
+                const fvf = price * fvfRate;
+                const fvfShipping = shipCost > 0 ? shipCost * 0.04 : 0;
+                const transactionFee = 0.30;
+                const totalFees = fvf + fvfShipping + transactionFee;
+
+                const netRevenue = price - totalFees;
+                const netProfit = netRevenue - totalCost;
+                const roi = cost > 0 ? (netProfit / cost) * 100 : 0;
+
+                let decision = '❌ NO';
+                if (roi >= targetROI && price >= 40 && roi >= 400) {
+                    decision = '✅ YES';
+                } else if (roi >= targetROI) {
+                    decision = '⚠️ MAYBE';
+                }
+
+                return {
+                    totalCost: totalCost.toFixed(2),
+                    totalFees: totalFees.toFixed(2),
+                    netProfit: netProfit.toFixed(2),
+                    roi: roi.toFixed(0),
+                    decision,
+                    feeRate: price > 0 ? ((totalFees / price) * 100).toFixed(1) : 0
+                };
+            };
+
+            const handleInputChange = (field, value) => {
+                setCurrentItem(prev => ({
+                    ...prev,
+                    [field]: value
+                }));
+            };
+
+            const handleAddItem = () => {
+                if (!currentItem.name || !currentItem.cost || !currentItem.ebayPrice) {
+                    alert('Please fill in Item Name, Cost, and eBay Price');
+                    return;
+                }
+
+                const results = calculateProfit(currentItem);
+                const newItem = {
+                    ...currentItem,
+                    ...results,
+                    timestamp: new Date().toISOString(),
+                    id: Date.now()
+                };
+
+                setItems(prev => [newItem, ...prev]);
+                
+                setCurrentItem({
+                    name: '',
+                    cost: '',
+                    ebayPrice: '',
+                    shippingCost: '',
+                    packageCost: '1.00',
+                    salesTax: currentItem.salesTax,
+                    hasStore: currentItem.hasStore,
+                    targetROI: currentItem.targetROI
+                });
+            };
+
+            const handleDeleteItem = (id) => {
+                setItems(prev => prev.filter(item => item.id !== id));
+            };
+
+            const handleClearHistory = () => {
+                if (window.confirm('Clear all saved items?')) {
+                    setItems([]);
+                    localStorage.removeItem('ebayCalculatorItems');
+                }
+            };
+
+            const currentResults = calculateProfit(currentItem);
+
+            const summary = {
+                totalItems: items.length,
+                yesCount: items.filter(i => i.decision === '✅ YES').length,
+                maybeCount: items.filter(i => i.decision === '⚠️ MAYBE').length,
+                noCount: items.filter(i => i.decision === '❌ NO').length,
+                totalProfit: items.reduce((sum, i) => sum + parseFloat(i.netProfit), 0).toFixed(2),
+                avgROI: items.length > 0 
+                    ? (items.reduce((sum, i) => sum + parseFloat(i.roi), 0) / items.length).toFixed(0)
+                    : 0
+            };
+
+            return (
+                <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+                    <div className="max-w-4xl mx-auto">
+                        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+                            <h1 className="text-3xl font-bold text-gray-800 mb-2">eBay Profit Calculator</h1>
+                            <p className="text-gray-600">Make smart sourcing decisions in seconds</p>
+                        </div>
+
+                        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+                            <h2 className="text-xl font-semibold text-gray-800 mb-4">Calculate Profit</h2>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                                <div className="md:col-span-2">
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Item Name</label>
+                                    <input
+                                        type="text"
+                                        value={currentItem.name}
+                                        onChange={(e) => handleInputChange('name', e.target.value)}
+                                        placeholder="North Face Jacket"
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Item Cost ($)</label>
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        value={currentItem.cost}
+                                        onChange={(e) => handleInputChange('cost', e.target.value)}
+                                        placeholder="5.00"
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">eBay Sell Price ($)</label>
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        value={currentItem.ebayPrice}
+                                        onChange={(e) => handleInputChange('ebayPrice', e.target.value)}
+                                        placeholder="45.00"
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Shipping Cost ($)</label>
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        value={currentItem.shippingCost}
+                                        onChange={(e) => handleInputChange('shippingCost', e.target.value)}
+                                        placeholder="8.00"
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Package Cost ($)</label>
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        value={currentItem.packageCost}
+                                        onChange={(e) => handleInputChange('packageCost', e.target.value)}
+                                        placeholder="1.00"
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Sales Tax (%)</label>
+                                    <input
+                                        type="number"
+                                        step="0.1"
+                                        value={currentItem.salesTax}
+                                        onChange={(e) => handleInputChange('salesTax', e.target.value)}
+                                        placeholder="8.6"
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Target ROI (%)</label>
+                                    <input
+                                        type="number"
+                                        step="50"
+                                        value={currentItem.targetROI}
+                                        onChange={(e) => handleInputChange('targetROI', e.target.value)}
+                                        placeholder="500"
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    />
+                                </div>
+
+                                <div className="flex items-center">
+                                    <label className="flex items-center cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={currentItem.hasStore}
+                                            onChange={(e) => handleInputChange('hasStore', e.target.checked)}
+                                            className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                                        />
+                                        <span className="ml-3 text-sm font-medium text-gray-700">
+                                            I have eBay Store (9.15% FVF)
+                                        </span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            {currentItem.cost && currentItem.ebayPrice && (
+                                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-6 mb-4">
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                                        <div>
+                                            <p className="text-sm text-gray-600">Total Cost</p>
+                                            <p className="text-xl font-bold text-gray-800">${currentResults.totalCost}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-sm text-gray-600">Total Fees</p>
+                                            <p className="text-xl font-bold text-gray-800">${currentResults.totalFees}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-sm text-gray-600">Net Profit</p>
+                                            <p className={`text-2xl font-bold ${parseFloat(currentResults.netProfit) > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                                ${currentResults.netProfit}
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <p className="text-sm text-gray-600">ROI</p>
+                                            <p className="text-2xl font-bold text-indigo-600">{currentResults.roi}%</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <p className="text-sm text-gray-600 mb-1">Fee Rate: {currentResults.feeRate}%</p>
+                                        </div>
+                                        <div className="text-4xl font-bold">
+                                            {currentResults.decision}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={handleAddItem}
+                                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition duration-200 shadow-md hover:shadow-lg"
+                                >
+                                    Save to History
+                                </button>
+                                <button
+                                    onClick={() => setCurrentItem({
+                                        name: '',
+                                        cost: '',
+                                        ebayPrice: '',
+                                        shippingCost: '',
+                                        packageCost: '1.00',
+                                        salesTax: currentItem.salesTax,
+                                        hasStore: currentItem.hasStore,
+                                        targetROI: currentItem.targetROI
+                                    })}
+                                    className="px-6 py-3 border-2 border-gray-300 hover:border-gray-400 text-gray-700 font-semibold rounded-lg transition duration-200"
+                                >
+                                    Clear
+                                </button>
+                            </div>
+                        </div>
+
+                        {items.length > 0 && (
+                            <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h2 className="text-xl font-semibold text-gray-800">Session Summary</h2>
+                                    <button
+                                        onClick={() => setShowHistory(!showHistory)}
+                                        className="text-blue-600 hover:text-blue-700 font-medium"
+                                    >
+                                        {showHistory ? 'Hide History' : 'Show History'}
+                                    </button>
+                                </div>
+                                
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                    <div className="bg-gray-50 rounded-lg p-4">
+                                        <p className="text-sm text-gray-600">Total Evaluated</p>
+                                        <p className="text-2xl font-bold text-gray-800">{summary.totalItems}</p>
+                                    </div>
+                                    <div className="bg-green-50 rounded-lg p-4">
+                                        <p className="text-sm text-gray-600">✅ YES Count</p>
+                                        <p className="text-2xl font-bold text-green-600">{summary.yesCount}</p>
+                                    </div>
+                                    <div className="bg-yellow-50 rounded-lg p-4">
+                                        <p className="text-sm text-gray-600">⚠️ MAYBE Count</p>
+                                        <p className="text-2xl font-bold text-yellow-600">{summary.maybeCount}</p>
+                                    </div>
+                                    <div className="bg-red-50 rounded-lg p-4">
+                                        <p className="text-sm text-gray-600">❌ NO Count</p>
+                                        <p className="text-2xl font-bold text-red-600">{summary.noCount}</p>
+                                    </div>
+                                    <div className="bg-blue-50 rounded-lg p-4">
+                                        <p className="text-sm text-gray-600">Potential Profit</p>
+                                        <p className="text-2xl font-bold text-blue-600">${summary.totalProfit}</p>
+                                    </div>
+                                    <div className="bg-indigo-50 rounded-lg p-4">
+                                        <p className="text-sm text-gray-600">Avg ROI</p>
+                                        <p className="text-2xl font-bold text-indigo-600">{summary.avgROI}%</p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {showHistory && items.length > 0 && (
+                            <div className="bg-white rounded-lg shadow-lg p-6">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h2 className="text-xl font-semibold text-gray-800">Evaluation History</h2>
+                                    <button
+                                        onClick={handleClearHistory}
+                                        className="text-red-600 hover:text-red-700 font-medium text-sm"
+                                    >
+                                        Clear All
+                                    </button>
+                                </div>
+                                
+                                <div className="space-y-3">
+                                    {items.map((item) => (
+                                        <div key={item.id} className="border border-gray-200 rounded-lg p-4 hover:border-blue-300 transition duration-200">
+                                            <div className="flex justify-between items-start mb-2">
+                                                <div className="flex-1">
+                                                    <h3 className="font-semibold text-gray-800">{item.name}</h3>
+                                                    <p className="text-sm text-gray-500">
+                                                        {new Date(item.timestamp).toLocaleString()}
+                                                    </p>
+                                                </div>
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-2xl">{item.decision}</span>
+                                                    <button
+                                                        onClick={() => handleDeleteItem(item.id)}
+                                                        className="text-red-500 hover:text-red-700 text-sm"
+                                                    >
+                                                        Delete
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            
+                                            <div className="grid grid-cols-4 gap-2 text-sm">
+                                                <div>
+                                                    <p className="text-gray-600">Cost</p>
+                                                    <p className="font-semibold">${item.cost}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-gray-600">Price</p>
+                                                    <p className="font-semibold">${item.ebayPrice}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-gray-600">Profit</p>
+                                                    <p className={`font-semibold ${parseFloat(item.netProfit) > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                                        ${item.netProfit}
+                                                    </p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-gray-600">ROI</p>
+                                                    <p className="font-semibold text-indigo-600">{item.roi}%</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="bg-gradient-to-r from-indigo-600 to-blue-600 rounded-lg shadow-lg p-6 text-white mt-6">
+                            <h2 className="text-xl font-semibold mb-4">Quick Reference</h2>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                                <div>
+                                    <p className="font-semibold mb-2">✅ BUY IF:</p>
+                                    <ul className="space-y-1 opacity-90">
+                                        <li>• ROI 500%+ (6x markup)</li>
+                                        <li>• Sell price $40+</li>
+                                        <li>• Net profit $20+</li>
+                                        <li>• You know the category</li>
+                                    </ul>
+                                </div>
+                                <div>
+                                    <p className="font-semibold mb-2">Typical Shipping:</p>
+                                    <ul className="space-y-1 opacity-90">
+                                        <li>• T-shirt/light: $5-6</li>
+                                        <li>• Jacket/jeans: $7-8</li>
+                                        <li>• Shoes: $8-10</li>
+                                        <li>• Boots/heavy: $10-12</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="text-center text-gray-600 text-sm mt-8 pb-4">
+                            <p>Made for smart resellers. Save this page for offline use.</p>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        ReactDOM.render(<EbayProfitCalculator />, document.getElementById('root'));
+    </script>
+</body>
+</html>
